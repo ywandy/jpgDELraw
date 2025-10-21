@@ -2,13 +2,22 @@
 # -*- coding: utf-8 -*-
 """
 JPG与RAW文件同步删除工具
-用于删除JPG目录中不存在对应文件的RAW文件
+用于将RAW目录中不存在对应JPG文件的RAW文件移动到系统回收站
+
+依赖:
+  pip install send2trash
 """
 
 import os
 import glob
 import argparse
 from pathlib import Path
+
+try:
+    from send2trash import send2trash
+    TRASH_AVAILABLE = True
+except ImportError:
+    TRASH_AVAILABLE = False
 
 
 def get_file_basename(filepath):
@@ -51,12 +60,12 @@ def find_orphaned_raw_files(raw_pattern, jpg_basenames):
 
 
 def preview_deletion(orphaned_files):
-    """预览将要删除的文件"""
+    """预览将要移动到回收站的文件"""
     if not orphaned_files:
-        print("没有找到需要删除的文件。")
+        print("没有找到需要移动到回收站的文件。")
         return False
     
-    print("\n以下RAW文件将被删除：")
+    print("\n以下RAW文件将被移动到回收站：")
     print("-" * 50)
     for i, file_path in enumerate(orphaned_files, 1):
         file_size = os.path.getsize(file_path)
@@ -72,7 +81,7 @@ def preview_deletion(orphaned_files):
 
 
 def delete_files(orphaned_files, dry_run=False):
-    """删除文件"""
+    """将文件移动到回收站"""
     if not orphaned_files:
         return
     
@@ -80,26 +89,31 @@ def delete_files(orphaned_files, dry_run=False):
         print("\n[预览模式] 不会实际删除文件")
         return
     
+    if not TRASH_AVAILABLE:
+        print("\n错误: 未安装 send2trash 库，无法使用回收站功能")
+        print("请运行: pip install send2trash")
+        return
+    
     deleted_count = 0
     failed_count = 0
     
-    print("\n开始删除文件...")
+    print("\n开始将文件移动到回收站...")
     for file_path in orphaned_files:
         try:
-            os.remove(file_path)
-            print(f"✓ 已删除: {file_path}")
+            send2trash(file_path)
+            print(f"✓ 已移动到回收站: {file_path}")
             deleted_count += 1
-        except OSError as e:
-            print(f"✗ 删除失败: {file_path} - {e}")
+        except Exception as e:
+            print(f"✗ 移动失败: {file_path} - {e}")
             failed_count += 1
     
-    print(f"\n删除完成: 成功 {deleted_count} 个，失败 {failed_count} 个")
+    print(f"\n操作完成: 成功移动到回收站 {deleted_count} 个，失败 {failed_count} 个")
 
 
 def confirm_deletion():
     """确认删除操作"""
     while True:
-        response = input("\n确定要删除这些文件吗? (y/n): ").lower().strip()
+        response = input("\n确定要将这些文件移动到回收站吗? (y/n): ").lower().strip()
         if response in ['y', 'yes', '是']:
             return True
         elif response in ['n', 'no', '否']:
@@ -128,7 +142,7 @@ def main():
                        help='RAW文件模式，例如: ./testpath/*.raw')
     parser.add_argument('--delete', 
                        action='store_true',
-                       help='实际删除文件（默认为预览模式）')
+                       help='将文件移动到回收站（默认为预览模式）')
     parser.add_argument('--auto-confirm', 
                        action='store_true',
                        help='自动确认删除，不提示用户')
@@ -143,7 +157,7 @@ def main():
     print("=" * 40)
     print(f"JPG文件模式: {args.jpg_dir}")
     print(f"RAW文件模式: {args.raw_dir}")
-    print(f"运行模式: {'删除模式' if args.delete else '预览模式'}")
+    print(f"运行模式: {'回收站模式' if args.delete else '预览模式'}")
     print()
     
     # 检查文件模式是否有效（通过检查是否能找到匹配的文件）
@@ -170,7 +184,7 @@ def main():
     
     # 如果不是删除模式，只预览
     if not args.delete:
-        print("\n[预览模式] 如需实际删除文件，请添加 --delete 参数")
+        print("\n[预览模式] 如需将文件移动到回收站，请添加 --delete 参数")
         return 0
     
     # 确认删除
